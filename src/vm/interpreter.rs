@@ -6,14 +6,22 @@ use crate::vm::intrinsics;
 
 pub struct ChimeraVM {
     stack: QudStack,
+    registers: HashMap<String, Qud>,
     functions: HashMap<String, QirFunction>,
     intrinsics: HashMap<String, fn(&mut QudStack)>,
+}
+
+impl Default for ChimeraVM {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ChimeraVM {
     pub fn new() -> Self {
         let mut vm = ChimeraVM {
             stack: QudStack::with_capacity(1024),
+            registers: HashMap::new(),
             functions: HashMap::new(),
             intrinsics: HashMap::new(),
         };
@@ -36,6 +44,74 @@ impl ChimeraVM {
         }
     }
 
+    /// Helper to lookup value from register or stack
+    fn get_value(&self, name: &str) -> Option<Qud> {
+        if let Some(&val) = self.registers.get(name) {
+            return Some(val);
+        }
+        None
+    }
+
+    /// SIMD vectorized addition - operates on vector registers
+    fn simd_add(&mut self, dest: &str, a: &str, b: &str, len: usize) {
+        // For now, simulate element-wise addition
+        // Real implementation would use AVX2/AVX-512 intrinsics
+        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", a, i)).copied()
+        }).collect();
+        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", b, i)).copied()
+        }).collect();
+
+        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals.into_iter()).enumerate() {
+            self.registers.insert(format!("{}_{}", dest, i), av + bv);
+        }
+    }
+
+    /// SIMD vectorized multiplication
+    fn simd_mul(&mut self, dest: &str, a: &str, b: &str, len: usize) {
+        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", a, i)).copied()
+        }).collect();
+        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", b, i)).copied()
+        }).collect();
+
+        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals.into_iter()).enumerate() {
+            self.registers.insert(format!("{}_{}", dest, i), av * bv);
+        }
+    }
+
+    /// Matrix transpose: converts row-major to column-major layout
+    fn simd_transpose(&mut self, dest: &str, src: &str, rows: usize, cols: usize) {
+        for i in 0..rows {
+            for j in 0..cols {
+                let src_idx = format!("{}_{}_{}", src, i, j);
+                let dest_idx = format!("{}_{}_{}", dest, j, i);
+                if let Some(&val) = self.registers.get(&src_idx) {
+                    self.registers.insert(dest_idx, val);
+                }
+            }
+        }
+    }
+
+    /// Dot product for quaternary vectors
+    fn simd_dot(&mut self, dest: &str, a: &str, b: &str, len: usize) -> Qud {
+        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", a, i)).copied()
+        }).collect();
+        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
+            self.registers.get(&format!("{}_{}", b, i)).copied()
+        }).collect();
+
+        let result: Qud = a_vals.into_iter()
+            .zip(b_vals.into_iter())
+            .fold(Qud::Zero, |acc, (av, bv)| acc + av * bv);
+        
+        self.registers.insert(dest.to_string(), result);
+        result
+    }
+
     pub fn run(&mut self, entry_point: &str) -> Result<Qud, String> {
         let func = self.functions.get(entry_point).cloned().ok_or_else(|| {
             format!("Function '{}' not found", entry_point)
@@ -43,97 +119,141 @@ impl ChimeraVM {
 
         let instructions = &func.body;
         let mut ip = 0usize;
+        let mut label_map: HashMap<String, usize> = HashMap::new();
+
+        // Build label map for jumps
+        for (idx, inst) in instructions.iter().enumerate() {
+            if let QirInstruction::Label(name) = inst {
+                label_map.insert(name.clone(), idx);
+            }
+        }
 
         while ip < instructions.len() {
             let inst = &instructions[ip];
             match inst {
                 QirInstruction::ConstQud(dest, val) => {
-                    let _ = dest;
-                    self.stack.push(*val);
+                    self.registers.insert(dest.clone(), *val);
                 }
-                QirInstruction::QAdd(_dest, _a, _b) => {
-                    let _ = (_dest, _a, _b);
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    self.stack.push(a + b);
+                QirInstruction::QAdd(dest, a, b) => {
+                    let a_val = self.registers.get(a).copied().unwrap_or(Qud::Zero);
+                    let b_val = self.registers.get(b).copied().unwrap_or(Qud::Zero);
+                    self.registers.insert(dest.clone(), a_val + b_val);
                 }
-                QirInstruction::QMul(_dest, _a, _b) => {
-                    let _ = (_dest, _a, _b);
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    self.stack.push(a * b);
+                QirInstruction::QMul(dest, a, b) => {
+                    let a_val = self.registers.get(a).copied().unwrap_or(Qud::Zero);
+                    let b_val = self.registers.get(b).copied().unwrap_or(Qud::Zero);
+                    self.registers.insert(dest.clone(), a_val * b_val);
                 }
-                QirInstruction::QNot(_dest, _src) => {
-                    let _ = _dest;
-                    let val = self.stack.pop();
-                    self.stack.push(val.qnot());
+                QirInstruction::QNot(dest, src) => {
+                    let src_val = self.registers.get(src).copied().unwrap_or(Qud::Zero);
+                    self.registers.insert(dest.clone(), src_val.qnot());
                 }
-                QirInstruction::Collapse(_dest, _src) => {
-                    let _ = (_dest, _src);
-                    let val = self.stack.pop();
-                    let collapsed = match val {
+                QirInstruction::Collapse(dest, src) => {
+                    let src_val = self.registers.get(src).copied().unwrap_or(Qud::Zero);
+                    let collapsed = match src_val {
                         Qud::Super => Qud::One,
                         Qud::Error => Qud::Zero,
-                        _ => val,
+                        other => other,
                     };
-                    self.stack.push(collapsed);
+                    self.registers.insert(dest.clone(), collapsed);
                 }
-                QirInstruction::BranchIf(lt, lf, _cond) => {
-                    let _ = (lt, lf);
-                    let _ = _cond;
-                    // TODO: implement actual branching
-                }
-                QirInstruction::Call(name, _dest, _args) => {
-                    let _ = _args;
-                    if let Some(intrinsic) = self.intrinsics.get(name) {
-                        intrinsic(&mut self.stack);
-                    } else if let Some(func) = self.functions.get(name).cloned() {
-                        let result = self.run(&func.name)?;
-                        self.stack.push(result);
-                    } else {
-                        return Err(format!("Unknown function/intrinsic: {}", name));
+                QirInstruction::Branch(lt, lf, cond) => {
+                    let cond_val = self.registers.get(cond).copied().unwrap_or(Qud::Zero);
+                    // Branch if condition != Zero (truthy)
+                    if cond_val != Qud::Zero {
+                        if let Some(&target) = label_map.get(lt) {
+                            ip = target;
+                            continue;
+                        }
+                    } else if let Some(&target) = label_map.get(lf) {
+                        ip = target;
+                        continue;
                     }
                 }
-                QirInstruction::Return(_val) => {
-                    return Ok(self.stack.pop());
+                QirInstruction::BranchIf(lt, lf, cond) => {
+                    let cond_val = self.registers.get(cond).copied().unwrap_or(Qud::Zero);
+                    if cond_val == Qud::One {
+                        if let Some(&target) = label_map.get(lt) {
+                            ip = target;
+                            continue;
+                        }
+                    } else if let Some(&target) = label_map.get(lf) {
+                        ip = target;
+                        continue;
+                    }
                 }
-                QirInstruction::Store(addr, _val) => {
-                    // Placeholder: debería almacenar en memoria address-based
-                    let _ = (addr, _val);
+                QirInstruction::Jump(label) => {
+                    if let Some(&target) = label_map.get(label) {
+                        ip = target;
+                        continue;
+                    }
                 }
-                QirInstruction::Load(_dest, addr) => {
-                    // Placeholder: debería cargar desde memoria
-                    let _ = (addr, _dest);
+                QirInstruction::Store(addr, val) => {
+                    let val = self.registers.get(val).copied().unwrap_or(Qud::Zero);
+                    self.registers.insert(addr.clone(), val);
                 }
-                QirInstruction::QAddVec(_dest, _a, _b, _len) => {
-                    // SIMD vectorized addition - placeholder
-                    let _ = (_dest, _a, _b, _len);
+                QirInstruction::Load(dest, addr) => {
+                    let val = self.registers.get(addr).copied().unwrap_or(Qud::Zero);
+                    self.registers.insert(dest.clone(), val);
                 }
-                QirInstruction::QMulVec(_dest, _a, _b, _len) => {
-                    // SIMD vectorized multiplication - placeholder
-                    let _ = (_dest, _a, _b, _len);
+                QirInstruction::Phi(dest, incoming) => {
+                    // Phi node: select incoming value based on control flow
+                    // For now, use the last available incoming value
+                    for src in incoming {
+                        if let Some(&val) = self.registers.get(src) {
+                            self.registers.insert(dest.clone(), val);
+                            break;
+                        }
+                    }
                 }
-                QirInstruction::QTranspose(_dest, _src, _rows, _cols) => {
-                    // Matrix transpose - placeholder
-                    let _ = (_dest, _src, _rows, _cols);
+                QirInstruction::Call(dest, func_name, args) => {
+                    // Push arguments
+                    for arg in args {
+                        let val = self.registers.get(arg).copied().unwrap_or(Qud::Zero);
+                        self.stack.push(val);
+                    }
+
+                    if let Some(intrinsic) = self.intrinsics.get(func_name) {
+                        intrinsic(&mut self.stack);
+                    } else if let Some(func) = self.functions.get(func_name).cloned() {
+                        let result = self.run(&func.name)?;
+                        self.registers.insert(dest.clone(), result);
+                    } else {
+                        return Err(format!("Unknown function/intrinsic: {}", func_name));
+                    }
                 }
-                QirInstruction::QDot(_dest, _a, _b, _len) => {
-                    // Dot product - placeholder
-                    let _ = (_dest, _a, _b, _len);
+                QirInstruction::Return(val) => {
+                    return Ok(self.registers.get(val).copied().unwrap_or(Qud::Zero));
                 }
-                QirInstruction::BranchTable(_default, _offset, _key, _targets) => {
-                    // Branch table - placeholder
-                    let _ = (_default, _offset, _key, _targets);
+                QirInstruction::QAddVec(dest, a, b, len) => {
+                    self.simd_add(dest, a, b, *len);
+                }
+                QirInstruction::QMulVec(dest, a, b, len) => {
+                    self.simd_mul(dest, a, b, *len);
+                }
+                QirInstruction::QTranspose(dest, src, rows, cols) => {
+                    self.simd_transpose(dest, src, *rows, *cols);
+                }
+                QirInstruction::QDot(dest, a, b, len) => {
+                    let result = self.simd_dot(dest, a, b, *len);
+                    self.registers.insert(dest.to_string(), result);
+                }
+                QirInstruction::BranchTable(default, _table_offset, key, targets) => {
+                    let key_val = self.registers.get(key).copied().unwrap_or(Qud::Zero);
+                    let idx = (key_val.to_u8() as usize).min(targets.len() - 1);
+                    if let Some(&target) = label_map.get(&targets[idx]) {
+                        ip = target;
+                        continue;
+                    } else if let Some(&target) = label_map.get(default) {
+                        ip = target;
+                        continue;
+                    }
                 }
                 _ => {}
             }
             ip += 1;
         }
 
-        if self.stack.len() == 0 {
-            Ok(Qud::Zero)
-        } else {
-            Ok(self.stack.pop())
-        }
+        Ok(self.registers.values().next().copied().unwrap_or(Qud::Zero))
     }
 }
