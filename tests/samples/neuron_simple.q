@@ -1,14 +1,10 @@
 -- neuron_simple.q
--- Ejemplo: capa neuronal simple en QUATRA
--- Suma ponderada de activaciones y colapso final
+-- Ejemplo: neurona cuaternaria simple
 
-fun neurona(entrada, peso, sesgo) =
-  let suma = entrada <+> peso
-  let activacion = suma <+> sesgo
-  collapse activacion
+fun neurona(entrada) =
+  let suma = entrada <+> 2 in
+  collapse suma
 
-let x = 1
-let w = 2
-let b = 1
-let salida = neurona(x, w, b)
-salida
+fun main() =
+  let x = 1 in
+  neurona x

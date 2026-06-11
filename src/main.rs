@@ -1,9 +1,11 @@
-use quatra::parser::Parser;
-use quatra::interpreter::Interpreter;
-use quatra::qir_translator::QirTranslator;
-use quatra::optimizer::Optimizer;
 use quatra::codegen::CodeGenerator;
+use quatra::dna_assembly::DnaGenerator;
+use quatra::interpreter::Interpreter;
+use quatra::optimizer::Optimizer;
+use quatra::parser::Parser;
+use quatra::qir_translator::QirTranslator;
 use quatra::qud::Qud;
+use quatra::verilog;
 use quatra::vm::ChimeraVM;
 use std::fs;
 
@@ -17,6 +19,9 @@ fn main() {
         eprintln!("  run <file.q>         Run with interpreter");
         eprintln!("  vm <file.q>          Execute with Chimera VM");
         eprintln!("  qir <file.q>         Show Q-IR");
+        eprintln!("  dna <file.q>         Generate DNA sequence");
+        eprintln!("  verilog <file.q>     Generate Verilog code");
+        eprintln!("  native <file.q>      Compile with JIT (requires --features jit)");
         eprintln!("  repl                 Interactive REPL");
         std::process::exit(1);
     }
@@ -84,6 +89,61 @@ fn main() {
             }
         }
 
+        "dna" => {
+            if args.len() < 3 {
+                eprintln!("Usage: quatra dna <file.q>");
+                std::process::exit(1);
+            }
+            let filepath = &args[2];
+            match generate_dna(filepath) {
+                Ok(output) => println!("{}", output),
+                Err(e) => {
+                    eprintln!("DNA error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "verilog" => {
+            if args.len() < 3 {
+                eprintln!("Usage: quatra verilog <file.q>");
+                std::process::exit(1);
+            }
+            let filepath = &args[2];
+            match generate_verilog_code(filepath) {
+                Ok(output) => println!("{}", output),
+                Err(e) => {
+                    eprintln!("Verilog error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "native" => {
+            if args.len() < 3 {
+                eprintln!("Usage: quatra native <file.q>");
+                std::process::exit(1);
+            }
+            #[cfg(feature = "jit")]
+            {
+                let filepath = &args[2];
+                match compile_native(filepath) {
+                    Ok(bytes) => {
+                        println!("Native code compiled: {} bytes", bytes.len());
+                    }
+                    Err(e) => {
+                        eprintln!("JIT error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            #[cfg(not(feature = "jit"))]
+            {
+                eprintln!("JIT compilation requires --features jit");
+                std::process::exit(1);
+            }
+        }
+
         "repl" => {
             println!("QUATRA REPL v0.1.0 (Ctrl+C to exit)");
             let mut interpreter = Interpreter::new();
@@ -120,8 +180,8 @@ fn main() {
 }
 
 fn compile_file(filepath: &str) -> Result<String, String> {
-    let source = fs::read_to_string(filepath)
-        .map_err(|e| format!("Failed to read {}: {}", filepath, e))?;
+    let source =
+        fs::read_to_string(filepath).map_err(|e| format!("Failed to read {}: {}", filepath, e))?;
 
     let mut parser = Parser::new(&source)?;
     let ast = parser.parse_program()?;
@@ -167,4 +227,51 @@ fn show_qir(filepath: &str) -> Result<(), String> {
     let optimized = Optimizer::optimize(qir_module);
     optimized.dump();
     Ok(())
+}
+
+fn generate_dna(filepath: &str) -> Result<String, String> {
+    let source =
+        fs::read_to_string(filepath).map_err(|e| format!("Failed to read {}: {}", filepath, e))?;
+
+    let mut parser = Parser::new(&source)?;
+    let ast = parser.parse_program()?;
+    let translator = QirTranslator::new();
+    let qir_module = translator.translate_program(&ast);
+    let optimized = Optimizer::optimize(qir_module);
+
+    let mut generator = DnaGenerator::new();
+    let sequences = generator.generate(&optimized);
+
+    Ok(sequences
+        .iter()
+        .map(|s| s.to_genbank())
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+fn generate_verilog_code(filepath: &str) -> Result<String, String> {
+    let source =
+        fs::read_to_string(filepath).map_err(|e| format!("Failed to read {}: {}", filepath, e))?;
+
+    let mut parser = Parser::new(&source)?;
+    let ast = parser.parse_program()?;
+    let translator = QirTranslator::new();
+    let qir_module = translator.translate_program(&ast);
+    let optimized = Optimizer::optimize(qir_module);
+
+    Ok(verilog::generate_verilog(&optimized))
+}
+
+#[cfg(feature = "jit")]
+fn compile_native(filepath: &str) -> Result<Vec<u8>, String> {
+    let source =
+        fs::read_to_string(filepath).map_err(|e| format!("Failed to read {}: {}", filepath, e))?;
+
+    let mut parser = Parser::new(&source)?;
+    let ast = parser.parse_program()?;
+    let translator = QirTranslator::new();
+    let qir_module = translator.translate_program(&ast);
+    let optimized = Optimizer::optimize(qir_module);
+
+    quatra::jit::emit_native(&optimized)
 }
