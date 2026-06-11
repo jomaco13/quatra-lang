@@ -1,0 +1,68 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "agent": {
+    "compiler-dev": {
+      "description": "Desarrolla el compilador QUATRA en Rust",
+      "mode": "primary",
+      "model": "kilo/free",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow"
+      }
+    },
+    "qa-reviewer": {
+      "description": "Revisa código QUATRA para calidad y seguridad",
+      "mode": "subagent",
+      "model": "kilo/free",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow"
+      }
+    },
+    "architect": {
+      "description": "Planificación y diseño arquitectónico de QUATRA",
+      "mode": "subagent",
+      "model": "kilo/free",
+      "permission": {
+        "edit": "allow",
+        "bash": "ask",
+        "read": "allow"
+      }
+    },
+    "rust-engineer": {
+      "description": "Especialista en Rust y optimizaciones SIMD",
+      "mode": "subagent",
+      "model": "kilo/free",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow"
+      }
+    }
+  },
+  "default_agent": "compiler-dev",
+  "model": "kilo/free",
+  "small_model": "kilo/free",
+  "snapshot": true,
+  "permission": {
+    "bash": "allow",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "task": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "external_directory": "allow"
+  },
+  "skills": {
+    "auto_load": true,
+    "paths": [
+      "./.kilo/skill",
+      "~/.config/kilo/skill",
+      "~/.agents/skills"
+    ]
+  }
+}

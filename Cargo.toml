@@ -1,0 +1,10 @@
+[package]
+name = "quatra"
+version = "0.1.0"
+edition = "2021"
+authors = ["QUATRA Project"]
+description = "Quaternary Functional Tensor Language - A functional language based on base-4 logic"
+
+[dependencies]
+
+[dev-dependencies]

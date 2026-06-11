@@ -1,0 +1,11 @@
+pub mod qud;
+pub mod ast;
+pub mod lexer;
+pub mod parser;
+pub mod interpreter;
+pub mod qir;
+pub mod optimizer;
+pub mod codegen;
+pub mod qir_translator;
+pub mod vm;
+pub mod nucleo;
