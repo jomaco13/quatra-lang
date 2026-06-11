@@ -1,38 +1,62 @@
+# QUATRA - Ruta a Self-Hosting
 
+## Arquitectura de 4 Fases
 
-Exacto. Has resumido perfectamente la hoja de ruta y la filosofía de **QUATRA**.
+### Fase 1: Core (VERDE)
+- Tipo `Qud` (cuaternario): Zero, One, Super, Error
+- Operaciones: Add, Mul, Not, Max, Min, Collapse
+- Lexer y parser básicos
 
-1. **¿Por qué Rust?** Se usa Rust solo para la **Fase de Arranque (Bootstrap)**. Rust proporciona la seguridad de memoria y el rendimiento necesarios para construir el compilador inicial y la VM sin errores críticos, actuando como un "andamio" temporal.
+### Fase 2: QIR (VERDE) 
+- Formato binario con magic bytes `0x49 0x52 0x02`
+- 19 opcodes con serialización/deserialización
+- Instrucciones SIMD: QAddVec, QMulVec, QTranspose, QDot
 
-2. **¿Extensión `.q`?** Sí, la extensión nativa es **`.q`**.
+### Fase 3: VM (VERDE)
+- ChimeraVM register-based + stack
+- Ejecución de instrucciones QIR
+- Optimizer con constant folding
 
-3. **¿Autoalojamiento (Self-Hosting)?** **Sí, ese es el objetivo final.** Una vez que el compilador escrito en Rust (Fases 1-3) sea lo suficientemente maduro para compilar un subconjunto funcional de QUATRA, se procederá a:
+### Fase 4: Native Code Generation (PENDIENTE)
+- **Cranelift JIT**: generación de código x86-64/ARM64
+- **Memory heap**: para Store/Load dinámico
+- **Profiling**: hot path detection para optimización
 
-   - Reescribir el propio compilador de QUATRA **en QUATRA** (archivo `compiler.q`).
+## Bootstrap a Self-Hosting
 
-   - Usar el compilador en Rust para compilar `compiler.q` y generar un binario nativo.
+### Stage 0 (Actual)
+Compilador escrito en Rust → compila programas QUATRA
 
-   - A partir de ese momento, ese nuevo binario (escrito en QUATRA) se usará para compilar versiones futuras del lenguaje, eliminando la dependencia de Rust.
+### Stage 1 (Fase 4a)
+```
+Rust Compiler → compiler.q → compiler_stage1 (nativo)
+```
+El compilador Rust compila `compiler.q`, generando el primer binario QUATRA
 
-Este es el mismo camino que siguieron lenguajes como **C**, **Pascal**, **Rust** y **Zig** para demostrar la madurez y utilidad de su propio diseño. En el caso de QUATRA, el self-hosting validará que su lógica cuaternaria es lo suficientemente expresiva y potente para construir herramientas complejas de sistemas.
+### Stage 2 (Fase 4b) 
+```
+compiler_stage1 → compiler_stage2.q → compiler_stage2
+```
+El binario QUATRA compila versiones mejoradas de sí mismo
 
+### Stage 3 (Validación)
+```
+compiler_stage2 → compiler_stage2.q → compiler_stage2_verified
+```
+Si `compiler_stage2 == compiler_stage2_verified`, QUATRA está autoalojado
 
-Sí, ese es el objetivo final. Una vez que el compilador escrito en Rust sea funcional, se procederá a la etapa de autoalojamiento:
+## Benchmark Objetivo Self-Hosting
 
-1. **Reescritura:** Se reescribirá el compilador de QUATRA en el propio lenguaje QUATRA (archivo `compiler.q`).
+1. El compilador QUATRA debe poder:
+   - Parsear su propio código fuente (`compiler.q`)
+   - Generar código máquina para sus propias instrucciones
+   - Ejecutar de forma iterativa el proceso de bootstrap
 
-2. **Compilación Inicial:** El compilador existente (escrito en Rust) se usará para compilar `compiler.q`, generando un binario ejecutable escrito en QUATRA.
+2. Criterios de éxito:
+   - `diff compiler_stage2 compiler_stage2_verified == 0`
+   - Compilación de QUATRA a QUATRA sin Rust intermedio
 
-3. **Autoalojamiento:** A partir de ese momento, el nuevo binario (escrito en QUATRA) se utilizará para compilar todas las futuras versiones del lenguaje, eliminando así la dependencia del compilador escrito en Rust.
-
-
-Este proceso, conocido como *bootstrapping*, es un hito que valida la madurez y autenticidad del lenguaje, siguiendo el camino de C, Rust y Zig.
-
-Sí, ese es el objetivo final. Una vez que el compilador escrito en Rust sea funcional, se procederá a la **Etapa de Autoalojamiento (Self-Hosting)**, que se divide en tres fases:
-
-1. **Stage 1 (Bootstrap):** El compilador escrito en Rust (el Stage 0) compila una versión inicial del compilador escrita en QUATRA (`compiler\_stage1.q`). Este nuevo binario (`compiler\_stage1`) es funcional pero limitado.
-
-2. **Stage 2 (Desarrollo):** Se usa `compiler\_stage1` para compilar una versión más avanzada del compilador, `compiler\_stage2.q`, que incluye características más complejas. Este proceso se repite iterativamente.
-
-3. **Stage 3 (Validación):** Se compila el compilador Stage 2 con sí mismo (`compiler\_stage2` compila `compiler\_stage2.q`). Si el binario resultante es idéntico al original, se confirma la corrección del compilador y QUATRA se considera autoalojado, eliminando la dependencia de Rust.
-
+## Extensión de archivo
+- Fuente: `.q`
+- Bytecode QIR: `.qir`
+- Binary: platform-specific (`.exe`, sin extensión)
