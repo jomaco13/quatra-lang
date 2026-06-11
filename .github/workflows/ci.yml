@@ -1,0 +1,33 @@
+name: QUATRA CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["", "jit"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --features ${{ matrix.features }}
+      - name: Run tests
+        run: cargo test --features ${{ matrix.features }}
+      - name: Clippy
+        run: cargo clippy --features ${{ matrix.features }} --all-targets -- -D warnings
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-features --release
