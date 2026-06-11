@@ -2,6 +2,8 @@
 
 A functional programming language based on base-4 logic for quantum simulation, FPGA hardware, and DNA synthesis.
 
+![QUATRA Visualization](assets/Gemini_Generated_Image_x8p4iix8p4iix8p4.png)
+
 ## Features
 
 - **4-State Logic**: Zero(0), One(1), Super(2), Error(3)
@@ -46,10 +48,12 @@ fun main() =
 
 ## Operators
 
-- `<+>` - Quaternary addition (modular)
-- `<*>` - Quaternary multiplication
-- `~~` - Quaternary NOT (rotation)
-- `collapse` - Collapse Super→One, Error→Zero
+| Operator | Function | Description |
+|----------|---------|-------------|
+| `<+>` | QAdd | Quaternary addition (modular) |
+| `<*>` | QMul | Quaternary multiplication |
+| `~~` | QNot | NOT rotation (0→1→2→3→0) |
+| `collapse` | - | Super→One, Error→Zero |
 
 ## Use Cases
 
@@ -61,10 +65,28 @@ fun main() =
 ## Documentation
 
 - [Phase 4 Implementation](docs/Phase4.md)
+- [Implementation Status](docs/IMPLEMENTATION_STATUS.md)
 - [Research Report](docs/RESEARCH_REPORT.md)
+- [Maintenance Guide](MAINTENANCE.md)
 
 ## Status
 
-- Tests: 33 passing
-- Clippy: 0 warnings
-- License: MIT
+[![Tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)]()
+[![Clippy](https://img.shields.io/badge/clippy-0%20warnings-brightgreen)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)]()
+
+## Backends
+
+| Backend | Command | File |
+|---------|---------|------|
+| ASM | `quatra compile` | `src/codegen.rs` |
+| Interpreter | `quatra run` | `src/interpreter.rs` |
+| Chimera VM | `quatra vm` | `src/vm/interpreter.rs` |
+| Q-IR | `quatra qir` | `src/qir.rs` |
+| JIT | `quatra native` | `src/jit.rs` |
+| Verilog | `quatra verilog` | `src/verilog.rs` |
+| DNA | `quatra dna` | `src/dna_assembly.rs` |
+
+## Examples
+
+See `examples.q` and `tests/samples/*.q` for working QUATRA programs.
