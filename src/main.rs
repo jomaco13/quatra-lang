@@ -128,7 +128,7 @@ fn compile_file(filepath: &str) -> Result<String, String> {
     let translator = QirTranslator::new();
     let qir_module = translator.translate_program(&ast);
     let optimized = Optimizer::optimize(qir_module);
-    let codegen = CodeGenerator::new();
+    let mut codegen = CodeGenerator::new();
     Ok(codegen.generate(&optimized))
 }
 
