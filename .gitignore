@@ -2,4 +2,3 @@ target/
 *.o
 *.rmeta
 .kilo/
-*.md
