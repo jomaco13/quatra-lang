@@ -19,7 +19,28 @@ impl CodeGenerator {
 }
 
 /// Native code generation - compiles QIR to object file
+///
+/// When the `jit` feature is enabled, uses Cranelift for native code generation.
+/// Otherwise, returns an error indicating the feature is required.
+#[cfg(feature = "jit")]
+pub fn emit_native(module: &QirModule) -> Result<Vec<u8>, String> {
+    jit::compile_module(module)
+}
+
+#[cfg(feature = "jit")]
+mod jit {
+    use crate::qir::QirModule;
+
+    /// Compile QIR module to native machine code (stub for cranelift integration)
+    pub fn compile_module(module: &QirModule) -> Result<Vec<u8>, String> {
+        let _ = module;
+        // TODO: Implement full QIR -> Cranelift IR translation
+        Err("QIR to Cranelift translation not implemented yet".to_string())
+    }
+}
+
+#[cfg(not(feature = "jit"))]
 pub fn emit_native(module: &QirModule) -> Result<Vec<u8>, String> {
     let _ = module;
-    Err("JIT compilation not implemented yet - requires cranelift dependency".to_string())
+    Err("JIT feature not enabled. Build with --features jit".to_string())
 }

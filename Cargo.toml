@@ -5,6 +5,10 @@ edition = "2021"
 authors = ["QUATRA Project"]
 description = "Quaternary Functional Tensor Language - A functional language based on base-4 logic"
 
+[features]
+default = []
+jit = []
+
 [dependencies]
 
 [dev-dependencies]

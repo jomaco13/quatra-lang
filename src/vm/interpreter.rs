@@ -45,6 +45,7 @@ impl ChimeraVM {
     }
 
     /// Helper to lookup value from register or stack
+    #[allow(dead_code)]
     fn get_value(&self, name: &str) -> Option<Qud> {
         if let Some(&val) = self.registers.get(name) {
             return Some(val);
