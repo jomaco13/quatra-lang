@@ -6,9 +6,9 @@ use std::collections::HashMap;
 /// Tipos cuaternarios soportados en QIR
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QirType {
-    Qud,      // Valor cuaternario escalar
-    VecQud,   // Vector de valores cuaternarios
-    Tensor,   // Tensor multidimensional
+    Qud,    // Valor cuaternario escalar
+    VecQud, // Vector de valores cuaternarios
+    Tensor, // Tensor multidimensional
 }
 
 /// Contexto de traducción con seguimiento de tipos y temporales
@@ -118,7 +118,9 @@ impl Expr {
             }
             Expr::Var(name) => {
                 // Buscar en var_map si existe binding
-                ctx.lookup_var(name).cloned().unwrap_or_else(|| name.clone())
+                ctx.lookup_var(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.clone())
             }
             Expr::BinOp(left, op, right) => {
                 let l = left.to_qir_inst(ir, ctx);
@@ -173,11 +175,7 @@ impl Expr {
                     arg_names.push(arg.to_qir_inst(ir, ctx));
                 }
                 let res = ctx.new_temp();
-                ir.push(QirInstruction::Call(
-                    res.clone(),
-                    name.clone(),
-                    arg_names,
-                ));
+                ir.push(QirInstruction::Call(res.clone(), name.clone(), arg_names));
                 ctx.reserve_type(&res, QirType::Qud);
                 res
             }

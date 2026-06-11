@@ -8,7 +8,10 @@ pub struct Tensor<T> {
 impl<T: Clone> Tensor<T> {
     pub fn new(shape: Vec<usize>, data: Vec<T>) -> Self {
         let expected: usize = shape.iter().product();
-        assert!(data.len() == expected, "Tensor data length does not match shape");
+        assert!(
+            data.len() == expected,
+            "Tensor data length does not match shape"
+        );
         Tensor { data, shape }
     }
 
@@ -76,7 +79,12 @@ impl Tensor<Qud> {
 
     pub fn times(&self, other: &Tensor<Qud>) -> Tensor<Qud> {
         assert_eq!(self.shape, other.shape, "Tensor::times requires same shape");
-        let data: Vec<Qud> = self.data.iter().zip(other.data.iter()).map(|(&a, &b)| a * b).collect();
+        let data: Vec<Qud> = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(&a, &b)| a * b)
+            .collect();
         Tensor {
             data,
             shape: self.shape.clone(),

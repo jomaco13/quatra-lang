@@ -221,7 +221,7 @@ impl QirInstruction {
                 push_varstr(&mut buf, key);
                 buf.extend_from_slice(&table_offset.to_le_bytes());
                 push_varstr(&mut buf, default);
-                buf.push(*&targets.len() as u8);
+                buf.push(targets.len() as u8);
                 for t in targets {
                     push_varstr(&mut buf, t);
                 }

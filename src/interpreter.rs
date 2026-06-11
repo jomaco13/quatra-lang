@@ -1,6 +1,6 @@
 use crate::ast::*;
-use crate::qud::Qud;
 use crate::parser::Parser;
+use crate::qud::Qud;
 use std::collections::HashMap;
 
 pub struct Interpreter {
@@ -20,9 +20,11 @@ impl Interpreter {
         match expr {
             Expr::QudLiteral(q) => Ok(*q),
 
-            Expr::Var(name) => {
-                self.env.get(name).copied().ok_or_else(|| format!("Undefined variable: {}", name))
-            }
+            Expr::Var(name) => self
+                .env
+                .get(name)
+                .copied()
+                .ok_or_else(|| format!("Undefined variable: {}", name)),
 
             Expr::BinOp(left, op, right) => {
                 let l = self.eval(left)?;
@@ -74,7 +76,11 @@ impl Interpreter {
     }
 
     pub fn call_function(&mut self, name: &str, _args: Vec<Qud>) -> Result<Qud, String> {
-        let func = self.funcs.get(name).ok_or_else(|| format!("Function not found: {}", name))?.clone();
+        let func = self
+            .funcs
+            .get(name)
+            .ok_or_else(|| format!("Function not found: {}", name))?
+            .clone();
         let prev_env: HashMap<String, Qud> = std::mem::take(&mut self.env);
         for (arg, val) in func.args.iter().zip(_args) {
             self.env.insert(arg.clone(), val);

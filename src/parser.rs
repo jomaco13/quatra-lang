@@ -1,6 +1,6 @@
-use crate::qud::Qud;
 use crate::ast::*;
 use crate::lexer::{Lexer, Token};
+use crate::qud::Qud;
 
 pub struct Parser {
     lexer: Lexer,
@@ -21,7 +21,10 @@ impl Parser {
         while !matches!(self.current, Token::Eof) {
             match &self.current {
                 Token::Func => definitions.push(self.parse_function()?),
-                Token::Let => main_expr = self.parse_let()?,
+                Token::Let => {
+                    // Let at top-level becomes the main expression
+                    main_expr = self.parse_let()?;
+                }
                 _ => main_expr = self.parse_expression()?,
             }
         }
@@ -33,38 +36,36 @@ impl Parser {
     }
 
     pub fn parse_expression(&mut self) -> Result<Expr, String> {
+        // Let expressions can appear at expression level
+        if let Token::Let = self.current {
+            return self.parse_let();
+        }
         self.parse_or()
     }
     pub fn parse_top_expression(&mut self) -> Result<Expr, String> {
+        // For top-level, also accept let bindings
+        if let Token::Let = self.current {
+            return self.parse_let();
+        }
         self.parse_or()
     }
 
     fn parse_or(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_and()?;
-        loop {
-            match self.current {
-                Token::QPlus => {
-                    self.bump();
-                    let right = self.parse_and()?;
-                    left = Expr::BinOp(Box::new(left), BinOperator::QAdd, Box::new(right));
-                }
-                _ => break,
-            }
+        while let Token::QPlus = self.current {
+            self.bump();
+            let right = self.parse_and()?;
+            left = Expr::BinOp(Box::new(left), BinOperator::QAdd, Box::new(right));
         }
         Ok(left)
     }
 
     fn parse_and(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_unary()?;
-        loop {
-            match self.current {
-                Token::QMul => {
-                    self.bump();
-                    let right = self.parse_unary()?;
-                    left = Expr::BinOp(Box::new(left), BinOperator::QMul, Box::new(right));
-                }
-                _ => break,
-            }
+        while let Token::QMul = self.current {
+            self.bump();
+            let right = self.parse_unary()?;
+            left = Expr::BinOp(Box::new(left), BinOperator::QMul, Box::new(right));
         }
         Ok(left)
     }
@@ -117,7 +118,10 @@ impl Parser {
                 self.expect(Token::RParen)?;
                 Ok(expr)
             }
-            _ => Err(format!("Unexpected token in expression: {:?}", self.current)),
+            _ => Err(format!(
+                "Unexpected token in expression: {:?}",
+                self.current
+            )),
         }
     }
 
@@ -187,8 +191,8 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::qud::Qud;
     use super::*;
+    use crate::qud::Qud;
 
     #[test]
     fn parses_literal() {

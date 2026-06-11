@@ -1,5 +1,5 @@
-use crate::vm::stack::QudStack;
 use crate::qud::Qud;
+use crate::vm::stack::QudStack;
 
 pub fn qadd_simd(_stack: &mut QudStack) {
     let b = _stack.pop();

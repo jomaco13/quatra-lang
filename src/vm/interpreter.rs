@@ -1,14 +1,53 @@
 use crate::qir::{QirFunction, QirInstruction, QirModule};
 use crate::qud::Qud;
+use crate::vm::intrinsics;
 use crate::vm::stack::QudStack;
 use std::collections::HashMap;
-use crate::vm::intrinsics;
+
+/// Simulated memory heap for QUATRA VM
+/// Uses a linear address space with 4-byte slots for Qud values
+#[derive(Debug, Clone, Default)]
+pub struct Memory {
+    /// Heap storage: address -> Qud value
+    data: HashMap<usize, Qud>,
+    /// Next available address (simulated)
+    next_addr: usize,
+}
+
+impl Memory {
+    pub fn new() -> Self {
+        Memory {
+            data: HashMap::new(),
+            next_addr: 0,
+        }
+    }
+
+    /// Allocate space for a value, returns address
+    pub fn alloc(&mut self, val: Qud) -> usize {
+        let addr = self.next_addr;
+        self.next_addr += 4;
+        self.data.insert(addr, val);
+        addr
+    }
+
+    /// Load value from address
+    pub fn load(&self, addr: usize) -> Qud {
+        self.data.get(&addr).copied().unwrap_or(Qud::Zero)
+    }
+
+    /// Store value at address
+    pub fn store(&mut self, addr: usize, val: Qud) {
+        self.data.insert(addr, val);
+    }
+}
 
 pub struct ChimeraVM {
     stack: QudStack,
     registers: HashMap<String, Qud>,
     functions: HashMap<String, QirFunction>,
     intrinsics: HashMap<String, fn(&mut QudStack)>,
+    /// Memory heap for dynamic allocation
+    memory: Memory,
 }
 
 impl Default for ChimeraVM {
@@ -24,6 +63,7 @@ impl ChimeraVM {
             registers: HashMap::new(),
             functions: HashMap::new(),
             intrinsics: HashMap::new(),
+            memory: Memory::new(),
         };
         vm.register_intrinsics();
         vm
@@ -57,28 +97,28 @@ impl ChimeraVM {
     fn simd_add(&mut self, dest: &str, a: &str, b: &str, len: usize) {
         // For now, simulate element-wise addition
         // Real implementation would use AVX2/AVX-512 intrinsics
-        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", a, i)).copied()
-        }).collect();
-        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", b, i)).copied()
-        }).collect();
+        let a_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", a, i)).copied())
+            .collect();
+        let b_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", b, i)).copied())
+            .collect();
 
-        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals.into_iter()).enumerate() {
+        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals).enumerate() {
             self.registers.insert(format!("{}_{}", dest, i), av + bv);
         }
     }
 
     /// SIMD vectorized multiplication
     fn simd_mul(&mut self, dest: &str, a: &str, b: &str, len: usize) {
-        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", a, i)).copied()
-        }).collect();
-        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", b, i)).copied()
-        }).collect();
+        let a_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", a, i)).copied())
+            .collect();
+        let b_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", b, i)).copied())
+            .collect();
 
-        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals.into_iter()).enumerate() {
+        for (i, (av, bv)) in a_vals.into_iter().zip(b_vals).enumerate() {
             self.registers.insert(format!("{}_{}", dest, i), av * bv);
         }
     }
@@ -98,25 +138,28 @@ impl ChimeraVM {
 
     /// Dot product for quaternary vectors
     fn simd_dot(&mut self, dest: &str, a: &str, b: &str, len: usize) -> Qud {
-        let a_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", a, i)).copied()
-        }).collect();
-        let b_vals: Vec<Qud> = (0..len).filter_map(|i| {
-            self.registers.get(&format!("{}_{}", b, i)).copied()
-        }).collect();
+        let a_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", a, i)).copied())
+            .collect();
+        let b_vals: Vec<Qud> = (0..len)
+            .filter_map(|i| self.registers.get(&format!("{}_{}", b, i)).copied())
+            .collect();
 
-        let result: Qud = a_vals.into_iter()
-            .zip(b_vals.into_iter())
+        let result: Qud = a_vals
+            .into_iter()
+            .zip(b_vals)
             .fold(Qud::Zero, |acc, (av, bv)| acc + av * bv);
-        
+
         self.registers.insert(dest.to_string(), result);
         result
     }
 
     pub fn run(&mut self, entry_point: &str) -> Result<Qud, String> {
-        let func = self.functions.get(entry_point).cloned().ok_or_else(|| {
-            format!("Function '{}' not found", entry_point)
-        })?;
+        let func = self
+            .functions
+            .get(entry_point)
+            .cloned()
+            .ok_or_else(|| format!("Function '{}' not found", entry_point))?;
 
         let instructions = &func.body;
         let mut ip = 0usize;
@@ -191,11 +234,24 @@ impl ChimeraVM {
                 }
                 QirInstruction::Store(addr, val) => {
                     let val = self.registers.get(val).copied().unwrap_or(Qud::Zero);
-                    self.registers.insert(addr.clone(), val);
+                    // Try to parse as numeric address, otherwise use named address mapping
+                    if let Ok(addr_num) = addr.parse::<usize>() {
+                        self.memory.store(addr_num, val);
+                    } else {
+                        // For named addresses, store in registers (for compatibility)
+                        // Allocations should use numeric addresses
+                        self.registers.insert(addr.clone(), val);
+                    }
                 }
                 QirInstruction::Load(dest, addr) => {
-                    let val = self.registers.get(addr).copied().unwrap_or(Qud::Zero);
-                    self.registers.insert(dest.clone(), val);
+                    // Try to parse as numeric address, otherwise use named address mapping
+                    if let Ok(addr_num) = addr.parse::<usize>() {
+                        let val = self.memory.load(addr_num);
+                        self.registers.insert(dest.clone(), val);
+                    } else {
+                        let val = self.registers.get(addr).copied().unwrap_or(Qud::Zero);
+                        self.registers.insert(dest.clone(), val);
+                    }
                 }
                 QirInstruction::Phi(dest, incoming) => {
                     // Phi node: select incoming value based on control flow

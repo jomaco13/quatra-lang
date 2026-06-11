@@ -1,4 +1,4 @@
-use quatra::qir::{Opcode, QirInstruction, QirModule, QirFunction};
+use quatra::qir::{Opcode, QirFunction, QirInstruction, QirModule};
 use quatra::qud::Qud;
 use std::io::Cursor;
 
@@ -26,11 +26,7 @@ mod tests {
 
     #[test]
     fn test_qadd_serialization() {
-        let inst = QirInstruction::QAdd(
-            "%t2".to_string(),
-            "%t0".to_string(),
-            "%t1".to_string(),
-        );
+        let inst = QirInstruction::QAdd("%t2".to_string(), "%t0".to_string(), "%t1".to_string());
         let bytes = inst.to_bytes();
         assert_eq!(bytes[0], Opcode::QAdd as u8);
     }
@@ -46,11 +42,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_qadd() {
-        let original = QirInstruction::QAdd(
-            "%t2".to_string(),
-            "%t0".to_string(),
-            "%t1".to_string(),
-        );
+        let original =
+            QirInstruction::QAdd("%t2".to_string(), "%t0".to_string(), "%t1".to_string());
         let bytes = original.to_bytes();
         let mut cursor = Cursor::new(&bytes);
         let decoded = QirInstruction::from_bytes(&mut cursor).unwrap();
