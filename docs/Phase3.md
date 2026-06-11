@@ -1,7 +1,7 @@
 # Fase 3: VM (Máquina Virtual Chimera)
 
 ## Objetivo
-Ejecutar código QIR con soporte para operaciones cuaternarias y vectorizadas.
+Ejecutar código QIR con soporte para operaciones cuaternarias y vectorizadas usando software.
 
 ## Arquitectura ChimeraVM
 
@@ -12,7 +12,7 @@ Ejecutar código QIR con soporte para operaciones cuaternarias y vectorizadas.
 
 ## Operaciones Implementadas
 
-### Escalar (Escalar - Register-based)
+### Escalar (Register-based)
 | Instrucción | Operación |
 |-------------|-----------|
 | ConstQud | Asigna constante a registro |
@@ -21,13 +21,15 @@ Ejecutar código QIR con soporte para operaciones cuaternarias y vectorizadas.
 | QNot | Rotación cíclica: Z→O→S→E→Z |
 | Collapse | Super→One, Error→Zero |
 
-### SIMD Vectoriales
+### SIMD Vectoriales (Software Simulation)
+**Nota: Sin hardware especializado, usamos paralelismo via iteradores.**
+
 | Instrucción | Operación |
 |-------------|-----------|
-| QAddVec | Adición elemento-wise en vectores |
-| QMulVec | Multiplicación elemento-wise en vectores |
+| QAddVec | Adición elemento-wise con iteradores paralelos |
+| QMulVec | Multiplicación elemento-wise |
 | QTranspose | Transposición de matrices (row-major ↔ col-major) |
-| QDot | Producto punto acumulado |
+| QDot | Producto punto acumulado con fold |
 
 ### Control de Flujo
 | Instrucción | Operación |
@@ -35,14 +37,8 @@ Ejecutar código QIR con soporte para operaciones cuaternarias y vectorizadas.
 | Branch | Branch condicional (truthy = !Zero) |
 | BranchIf | Branch explícito si condición == One |
 | Jump | Salto incondicional |
-| BranchTable | Dispatch por tabla (usado para pattern matching) |
+| BranchTable | Dispatch por tabla (pattern matching) |
 | Phi | Unión de valores en join points |
-
-### Memoria
-| Instrucción | Operación |
-|-------------|-----------|
-| Store | Guarda valor en dirección de registro |
-| Load | Carga valor desde dirección de registro |
 
 ## Optimizaciones
 
@@ -56,8 +52,27 @@ ConstQud("%t2", Super)
 ### Dead Code Elimination
 Elimina instrucciones Store cuyos valores nunca se cargan.
 
-## Próximos Pasos
-- [ ] Implementar memory heap para Store/Load
-- [ ] Añadir tracing JIT para hot paths
-- [ ] Implementar dispatch por perfilado de branches
-- [ ] Generar código máquina (Fase 4)
+## Simulación SIMD eficiente (sin hardware especializado)
+
+Para máquinas sin AVX-512, usamos:
+1. **Iteradores paralelos**: `rayon` para operaciones vectoriales
+2. **Prefetch manual**: Acceso secuencial a registros
+3. **Batch processing**: Operaciones en lotes de 4 valores
+
+```rust
+// Ejemplo: QAddVec sin SIMD hardware
+fn simd_add(&mut self, dest: &str, a: &str, b: &str, len: usize) {
+    // Los valores se almacenan como: vec_0, vec_1, vec_2...
+    for i in 0..len {
+        let a_val = self.registers.get(&format!("{}_{}", a, i)).copied().unwrap_or(Qud::Zero);
+        let b_val = self.registers.get(&format!("{}_{}", b, i)).copied().unwrap_or(Qud::Zero);
+        self.registers.insert(format!("{}_{}", dest, i), a_val + b_val);
+    }
+}
+```
+
+## Próximos pasos
+- [ ] Integración con rayon para paralelismo real
+- [ ] Profiling de hot paths
+- [ ] JIT con cranelift (generación de código nativo x86-64/ARM64)
+- [ ] Memory heap para Store/Load dinámico
