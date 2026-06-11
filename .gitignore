@@ -1,4 +1,4 @@
 target/
 *.o
 *.rmeta
-.kilo/
+.kilo/.kilo/\nkilo.json
